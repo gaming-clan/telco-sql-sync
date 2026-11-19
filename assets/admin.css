@@ -1,0 +1,7 @@
+.wcsi-scroll { overflow-x: auto; max-width: 100%; }
+.wcsi-map select { min-width: 260px; }
+.wcsi label { margin-right: 16px; }
+.wcsi-bar { background: #dcdcde; height: 18px; border-radius: 9px; overflow: hidden; max-width: 600px; }
+.wcsi-bar-fill { background: #2271b1; height: 100%; width: 0; transition: width .3s; }
+.wcsi-log { background: #1d2327; color: #f0f0f1; padding: 12px; max-height: 320px; overflow: auto; white-space: pre-wrap; }
+.wcsi-log:empty { display: none; }
