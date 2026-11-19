@@ -11,14 +11,15 @@ CREATE TABLE `products` (
   `description` text,
   `stock` int(11) DEFAULT NULL,
   `category` varchar(255) DEFAULT NULL,
-  `image_url` varchar(512) DEFAULT NULL,
+  `image_path` varchar(512) DEFAULT NULL,
+  `image_folder` varchar(512) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `sku` (`sku`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `products` VALUES
-(1,'Blue T-Shirt','TSH-BLU','19.99',NULL,'Soft cotton; it''s "classic".\nTwo lines; with a semicolon.',25,'Clothing > Shirts',NULL),
-(2,'Red Mug','MUG-RED','9.50','7.00','Ceramic mug -- dishwasher safe /* not a comment */',0,'Home,Kitchen',NULL),
-(3,'Backslash \\ Test','BSL-001','1,299.00',NULL,'Escaped quote \' and unicode é ü',5,'Misc',NULL);
+(1,'Blue T-Shirt','TSH-BLU','19.99',NULL,'Soft cotton; it''s "classic".\nTwo lines; with a semicolon.',25,'Clothing > Shirts','main-tshirt.png','tshirt'),
+(2,'Red Mug','MUG-RED','9.50','7.00','Ceramic mug -- dishwasher safe /* not a comment */',0,'Home,Kitchen',NULL,'mug'),
+(3,'Backslash \\ Test','BSL-001','1,299.00',NULL,'Escaped quote \' and unicode é ü',5,'Misc','missing-file.png',NULL);
 
 INSERT INTO `products` (`id`,`name`,`sku`,`price`) VALUES (4,'Plain Item','PLN-004',4.25);

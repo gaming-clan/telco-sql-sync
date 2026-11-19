@@ -29,6 +29,7 @@ class WCSI_Importer {
 			'tags'              => array( __( 'Tags', 'telco-sql-sync' ), array( 'tags', 'tag', 'keywords' ) ),
 			'image'             => array( __( 'Main image (URL or file name)', 'telco-sql-sync' ), array( 'image', 'image_url', 'img', 'thumbnail', 'picture', 'photo' ) ),
 			'gallery'           => array( __( 'Gallery images (list)', 'telco-sql-sync' ), array( 'gallery', 'images', 'gallery_images', 'additional_images' ) ),
+			'gallery_folder'    => array( __( 'Image folder → gallery (folder path)', 'telco-sql-sync' ), array( 'gallery_folder', 'image_folder', 'images_folder', 'photos_folder', 'folder' ) ),
 			'weight'            => array( __( 'Weight', 'telco-sql-sync' ), array( 'weight' ) ),
 			'length'            => array( __( 'Length', 'telco-sql-sync' ), array( 'length' ) ),
 			'width'             => array( __( 'Width', 'telco-sql-sync' ), array( 'width' ) ),
@@ -241,25 +242,49 @@ class WCSI_Importer {
 
 		$warnings = array();
 		if ( ! empty( $this->opts['images'] ) ) {
+			$main_id = 0;
+			$gallery = array();
+
 			if ( $this->has( $data, 'image' ) && '' !== trim( (string) $this->val( $data, 'image' ) ) ) {
 				try {
-					$product->set_image_id( $this->image_id( $this->val( $data, 'image' ) ) );
+					$main_id = $this->image_id( $this->val( $data, 'image' ) );
 				} catch ( Throwable $e ) {
 					$warnings[] = 'main image: ' . $e->getMessage();
 				}
 			}
 			if ( $this->has( $data, 'gallery' ) && '' !== trim( (string) $this->val( $data, 'gallery' ) ) ) {
-				$ids = array();
 				foreach ( $this->split_list( $this->val( $data, 'gallery' ) ) as $src ) {
 					try {
-						$ids[] = $this->image_id( $src );
+						$gallery[] = $this->image_id( $src );
 					} catch ( Throwable $e ) {
 						$warnings[] = 'gallery image: ' . $e->getMessage();
 					}
 				}
-				if ( $ids ) {
-					$product->set_gallery_image_ids( $ids );
+			}
+			if ( $this->has( $data, 'gallery_folder' ) && '' !== trim( (string) $this->val( $data, 'gallery_folder' ) ) ) {
+				try {
+					foreach ( $this->folder_images( $this->val( $data, 'gallery_folder' ) ) as $file ) {
+						try {
+							$gallery[] = $this->image_id( $file );
+						} catch ( Throwable $e ) {
+							$warnings[] = 'folder image: ' . $e->getMessage();
+						}
+					}
+				} catch ( Throwable $e ) {
+					$warnings[] = 'image folder: ' . $e->getMessage();
 				}
+			}
+
+			// No explicit main image: optionally promote the first gallery image.
+			if ( ! $main_id && ! empty( $this->opts['first_as_main'] ) && $gallery && ! $product->get_image_id() ) {
+				$main_id = array_shift( $gallery );
+			}
+			if ( $main_id ) {
+				$product->set_image_id( $main_id );
+			}
+			$gallery = array_values( array_diff( array_unique( $gallery ), array( $main_id ) ) );
+			if ( $gallery ) {
+				$product->set_gallery_image_ids( $gallery );
 			}
 		}
 
@@ -347,7 +372,43 @@ class WCSI_Importer {
 		return array_values( array_unique( $ids ) );
 	}
 
-	/** Sideload an image (URL, or file relative to the configured base folder). Returns attachment ID. */
+	/**
+	 * Resolve a file/folder path from the SQL to a real path that is guaranteed
+	 * to live inside the configured image folder (relative, or absolute inside it).
+	 */
+	private function resolve_local( $path ) {
+		$base = isset( $this->opts['image_base'] ) ? (string) $this->opts['image_base'] : '';
+		if ( '' === $base || ! is_dir( $base ) ) {
+			throw new Exception( $path . ' – not a URL and no valid local image folder configured' );
+		}
+		$real_base = rtrim( realpath( $base ), '/\\' );
+		$path      = trim( (string) $path );
+		$absolute  = (bool) preg_match( '#^([a-zA-Z]:[\\\\/]|/|\\\\\\\\)#', $path );
+		$real      = realpath( $absolute ? $path : $real_base . DIRECTORY_SEPARATOR . ltrim( $path, '/\\' ) );
+		if ( ! $real || 0 !== strpos( $real . DIRECTORY_SEPARATOR, $real_base . DIRECTORY_SEPARATOR ) ) {
+			throw new Exception( $path . ' – not found inside the image folder' );
+		}
+		return $real;
+	}
+
+	/** Image files directly inside a folder, in natural filename order. */
+	private function folder_images( $folder ) {
+		$dir = $this->resolve_local( $folder );
+		if ( ! is_dir( $dir ) ) {
+			throw new Exception( $folder . ' – is not a folder' );
+		}
+		$files = array();
+		foreach ( (array) scandir( $dir ) as $f ) {
+			$full = $dir . DIRECTORY_SEPARATOR . $f;
+			if ( is_file( $full ) && preg_match( '/\.(jpe?g|png|gif|webp|avif)$/i', $f ) ) {
+				$files[] = $full;
+			}
+		}
+		natcasesort( $files );
+		return array_slice( array_values( $files ), 0, (int) apply_filters( 'wcsi_max_folder_images', 30 ) );
+	}
+
+	/** Sideload an image (URL, or file inside the configured image folder). Returns attachment ID. */
 	private function image_id( $src ) {
 		$src = trim( (string) $src );
 
@@ -376,13 +437,8 @@ class WCSI_Importer {
 			}
 			$name = basename( (string) wp_parse_url( $src, PHP_URL_PATH ) );
 		} else {
-			$base = $this->opts['image_base'];
-			if ( '' === $base || ! is_dir( $base ) ) {
-				throw new Exception( $src . ' – not a URL and no valid local image folder configured' );
-			}
-			$real_base = realpath( $base );
-			$real      = realpath( $real_base . DIRECTORY_SEPARATOR . ltrim( $src, '/\\' ) );
-			if ( ! $real || 0 !== strpos( $real, $real_base ) || ! is_file( $real ) ) {
+			$real = $this->resolve_local( $src );
+			if ( ! is_file( $real ) ) {
 				throw new Exception( $src . ' – file not found in image folder' );
 			}
 			$tmp = wp_tempnam( $real );

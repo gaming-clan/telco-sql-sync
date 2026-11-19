@@ -71,6 +71,71 @@ class WCSI_Admin {
 		return $dir;
 	}
 
+	/** Recursively delete a directory (only ever called on folders this plugin created). */
+	public static function rrmdir( $dir ) {
+		if ( ! is_dir( $dir ) ) {
+			return;
+		}
+		foreach ( (array) scandir( $dir ) as $f ) {
+			if ( '.' === $f || '..' === $f ) {
+				continue;
+			}
+			$p = $dir . DIRECTORY_SEPARATOR . $f;
+			if ( is_dir( $p ) && ! is_link( $p ) ) {
+				self::rrmdir( $p );
+			} else {
+				@unlink( $p ); // phpcs:ignore
+			}
+		}
+		@rmdir( $dir ); // phpcs:ignore
+	}
+
+	/**
+	 * Extract an uploaded ZIP of images into a private folder and delete anything
+	 * that is not an image (so no scripts can be smuggled in). Returns the folder.
+	 */
+	private static function extract_images_zip( array $f, $job_id ) {
+		if ( UPLOAD_ERR_OK !== (int) $f['error'] ) {
+			throw new Exception( __( 'Image ZIP upload failed – it may exceed PHP upload_max_filesize. Use the server image folder option instead.', 'telco-sql-sync' ) );
+		}
+		if ( 'zip' !== strtolower( pathinfo( $f['name'], PATHINFO_EXTENSION ) ) || ! is_uploaded_file( $f['tmp_name'] ) ) {
+			throw new Exception( __( 'The images file must be a .zip.', 'telco-sql-sync' ) );
+		}
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		WP_Filesystem();
+		$dest = self::upload_dir() . '/img-' . $job_id;
+		wp_mkdir_p( $dest );
+		$res = unzip_file( $f['tmp_name'], $dest );
+		if ( is_wp_error( $res ) ) {
+			self::rrmdir( $dest );
+			throw new Exception( $res->get_error_message() );
+		}
+		self::prune_non_images( $dest );
+
+		// If the ZIP contains a single top-level folder, use that as the base.
+		$entries = array_values( array_diff( (array) scandir( $dest ), array( '.', '..' ) ) );
+		if ( 1 === count( $entries ) && is_dir( $dest . '/' . $entries[0] ) ) {
+			$dest .= '/' . $entries[0];
+		}
+		return $dest;
+	}
+
+	private static function prune_non_images( $dir ) {
+		foreach ( (array) scandir( $dir ) as $f ) {
+			if ( '.' === $f || '..' === $f ) {
+				continue;
+			}
+			$p = $dir . DIRECTORY_SEPARATOR . $f;
+			if ( is_link( $p ) ) {
+				@unlink( $p ); // phpcs:ignore
+			} elseif ( is_dir( $p ) ) {
+				self::prune_non_images( $p );
+			} elseif ( ! preg_match( '/\.(jpe?g|png|gif|webp|avif)$/i', $f ) ) {
+				@unlink( $p ); // phpcs:ignore
+			}
+		}
+	}
+
 	private static function fail( $msg ) {
 		wp_safe_redirect( add_query_arg( array( 'page' => self::SLUG, 'wcsi_error' => rawurlencode( $msg ) ), admin_url( 'edit.php?post_type=product' ) ) );
 		exit;
@@ -182,8 +247,22 @@ class WCSI_Admin {
 			'failed'    => 0,
 			'log'       => array(),
 			'new_log'   => array(),
-			'done'      => false,
+			'done'       => false,
+			'image_base' => '',
+			'images_dir' => '',
 		);
+
+		if ( ! empty( $_FILES['images_zip']['name'] ) ) {
+			try {
+				$job['images_dir'] = self::extract_images_zip( $_FILES['images_zip'], $job['id'] ); // phpcs:ignore WordPress.Security
+				$job['image_base'] = $job['images_dir'];
+			} catch ( Throwable $e ) {
+				if ( $uploaded ) {
+					wp_delete_file( $file );
+				}
+				self::fail( $e->getMessage() );
+			}
+		}
 		self::save_job( $job );
 
 		wp_safe_redirect( add_query_arg( array( 'page' => self::SLUG, 'step' => 'map', 'job' => $job['id'] ), admin_url( 'edit.php?post_type=product' ) ) );
@@ -228,6 +307,7 @@ class WCSI_Admin {
 			'status'     => in_array( $status_in, array( 'publish', 'draft', 'pending', 'private' ), true ) ? $status_in : 'publish',
 			'images'     => ! empty( $_POST['images'] ),
 			'image_base' => $base,
+			'first_as_main' => ! empty( $_POST['first_as_main'] ),
 			'list_sep'   => isset( $_POST['list_sep'] ) ? (string) wp_unslash( $_POST['list_sep'] ) : ',', // phpcs:ignore WordPress.Security
 		);
 		$job['table']   = $table;
@@ -263,8 +343,13 @@ class WCSI_Admin {
 			}
 		}
 
-		if ( $job['done'] && ! empty( $job['uploaded'] ) && is_file( $job['file'] ) ) {
-			wp_delete_file( $job['file'] );
+		if ( $job['done'] ) {
+			if ( ! empty( $job['uploaded'] ) && is_file( $job['file'] ) ) {
+				wp_delete_file( $job['file'] );
+			}
+			if ( ! empty( $job['images_dir'] ) ) {
+				self::rrmdir( self::upload_dir() . '/img-' . $job['id'] );
+			}
 		}
 		self::save_job( $job );
 
@@ -329,6 +414,11 @@ class WCSI_Admin {
 					<th><label for="sql_path"><?php esc_html_e( '…or path on this server', 'telco-sql-sync' ); ?></label></th>
 					<td><input type="text" class="large-text" id="sql_path" name="sql_path" placeholder="C:\data\products.sql  or  /home/user/products.sql">
 					<p class="description"><?php esc_html_e( 'Use this for large dumps or a file already on the web server. Must end in .sql.', 'telco-sql-sync' ); ?></p></td>
+				</tr>
+				<tr>
+					<th><label for="images_zip"><?php esc_html_e( 'Images ZIP (optional)', 'telco-sql-sync' ); ?></label></th>
+					<td><input type="file" id="images_zip" name="images_zip" accept=".zip">
+					<p class="description"><?php esc_html_e( 'A ZIP of your product images. Image paths and folders in the SQL file are then resolved inside it. Only image files are kept. Skip this if you point to an image folder on the server in the next step.', 'telco-sql-sync' ); ?></p></td>
 				</tr>
 			</table>
 			<?php submit_button( __( 'Analyze file', 'telco-sql-sync' ) ); ?>
@@ -412,7 +502,9 @@ class WCSI_Admin {
 					<input type="text" name="list_sep" id="list_sep" value="," size="3"> <span class="description"><?php esc_html_e( 'For categories, tags and gallery images.', 'telco-sql-sync' ); ?></span></td></tr>
 				<tr><th><?php esc_html_e( 'Images', 'telco-sql-sync' ); ?></th><td>
 					<label><input type="checkbox" name="images" value="1" checked> <?php esc_html_e( 'Download / import images into the media library', 'telco-sql-sync' ); ?></label><br>
-					<input type="text" class="large-text" name="image_base" placeholder="<?php esc_attr_e( 'Optional: server folder for image file names that are not URLs', 'telco-sql-sync' ); ?>"></td></tr>
+					<input type="text" class="large-text" name="image_base" value="<?php echo esc_attr( $job['image_base'] ); ?>" placeholder="<?php esc_attr_e( 'Image folder on the server (paths in the SQL are relative to it, or absolute inside it)', 'telco-sql-sync' ); ?>">
+					<p class="description"><?php echo esc_html( $job['image_base'] ? __( 'Pre-filled from your uploaded ZIP.', 'telco-sql-sync' ) : __( 'Not needed for image URLs. Files outside this folder are never read.', 'telco-sql-sync' ) ); ?></p>
+					<label><input type="checkbox" name="first_as_main" value="1" checked> <?php esc_html_e( 'If a product has no main image, use the first image from its gallery folder', 'telco-sql-sync' ); ?></label></td></tr>
 			</table>
 			<?php submit_button( __( 'Start import', 'telco-sql-sync' ) ); ?>
 		</form>

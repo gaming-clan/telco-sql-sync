@@ -11,7 +11,9 @@ SQL **analizohet (parse), nuk ekzekutohet kurrë** – lexohen vetëm komandat `
 - Zbulon automatikisht tabelat dhe kolonat, me një ekran përputhjeje (mapping) për të korrigjuar çdo hamendësim të gabuar
 - Përputh emrin, SKU-në, çmimet, përshkrimet, stokun, statusin, kategoritë (hierarki `A > B`), etiketat, imazhet, peshën dhe përmasat
 - Krijon produkte të reja ose përditëson/kapërcen ato ekzistueset (të përputhura sipas SKU-së ose një ID burimi)
-- Importon imazhe nga URL ose nga një dosje në server në bibliotekën e medias
+- Importon imazhe në bibliotekën e medias: një kolonë me URL ose rrugë skedari bëhet foto kryesore e produktit, kurse një kolonë me rrugën e një dosjeje i vendos të gjitha imazhet e asaj dosjeje në galerinë e produktit
+- Mund të ngarkoni opsionalisht një ZIP me imazhet, që rrugët dhe dosjet në SQL të gjenden brenda tij (ruhen vetëm skedarët imazh)
+- Rrugët lokale të imazheve kufizohen te dosja që zgjidhni; asgjë jashtë saj nuk lexohet kurrë
 - Import me grupe (batch) përmes AJAX, me shirit progresi, regjistër gabimesh dhe vazhdim pas ndërprerjes
 
 ## Instalimi

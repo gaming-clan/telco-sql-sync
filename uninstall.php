@@ -8,10 +8,19 @@ $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'wcsi\_job\_%
 $u   = wp_upload_dir();
 $dir = trailingslashit( $u['basedir'] ) . 'wcsi-imports';
 if ( is_dir( $dir ) ) {
-	foreach ( (array) glob( $dir . '/{.,}*', GLOB_BRACE ) as $f ) {
-		if ( is_file( $f ) ) {
-			wp_delete_file( $f );
+	$rm = function ( $d ) use ( &$rm ) {
+		foreach ( (array) scandir( $d ) as $f ) {
+			if ( '.' === $f || '..' === $f ) {
+				continue;
+			}
+			$p = $d . DIRECTORY_SEPARATOR . $f;
+			if ( is_dir( $p ) && ! is_link( $p ) ) {
+				$rm( $p );
+			} else {
+				@unlink( $p ); // phpcs:ignore
+			}
 		}
-	}
-	@rmdir( $dir ); // phpcs:ignore
+		@rmdir( $d ); // phpcs:ignore
+	};
+	$rm( $dir );
 }
