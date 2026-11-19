@@ -1,5 +1,7 @@
 # Telco SQL Sync
 
+**English** | [Shqip](README.sq.md)
+
 A WooCommerce plugin that imports products from a local `.sql` dump file.
 
 The SQL is **parsed, never executed** – only `INSERT` statements are read and turned into WooCommerce products.
@@ -23,4 +25,4 @@ Try it with `sample/sample-products.sql`.
 - INSERTs need column names, or the file needs a `CREATE TABLE`
 
 ## License
-GPL-2.0-or-later
+GPL-2.0-or-later. See [LICENSE](LICENSE) (official English text); an unofficial Albanian summary is in [LICENSE.sq.md](LICENSE.sq.md).
