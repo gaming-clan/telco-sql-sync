@@ -327,13 +327,13 @@ class WCSI_Importer {
 		}
 
 		if ( '' !== $name ) {
-			$product->set_name( $name );
+			$product->set_name( wp_slash( $name ) );
 		}
 		if ( $this->has( $data, 'slug' ) && '' !== $this->str( $data, 'slug' ) ) {
 			$product->set_slug( sanitize_title( $this->val( $data, 'slug' ) ) );
 		}
 		if ( $this->has( $data, 'short_description' ) ) {
-			$product->set_short_description( wp_kses_post( (string) $this->val( $data, 'short_description' ) ) );
+			$product->set_short_description( wp_slash( wp_kses_post( (string) $this->val( $data, 'short_description' ) ) ) );
 		}
 		if ( $this->has( $data, 'featured' ) ) {
 			$product->set_featured( $this->truthy( $this->val( $data, 'featured' ) ) );
@@ -433,7 +433,7 @@ class WCSI_Importer {
 		}
 
 		if ( $this->has( $data, 'description' ) ) {
-			$variation->set_description( wp_kses_post( (string) $this->val( $data, 'description' ) ) );
+			$variation->set_description( wp_slash( wp_kses_post( (string) $this->val( $data, 'description' ) ) ) );
 		}
 		if ( $this->has( $data, 'menu_order' ) && is_numeric( $this->val( $data, 'menu_order' ) ) ) {
 			$variation->set_menu_order( (int) $this->val( $data, 'menu_order' ) );
@@ -493,7 +493,7 @@ class WCSI_Importer {
 			$product->set_sku( $sku );
 		}
 		if ( ! $is_variation && $this->has( $data, 'description' ) ) {
-			$product->set_description( wp_kses_post( (string) $this->val( $data, 'description' ) ) );
+			$product->set_description( wp_slash( wp_kses_post( (string) $this->val( $data, 'description' ) ) ) );
 		}
 		if ( $this->has( $data, 'regular_price' ) ) {
 			$product->set_regular_price( $this->price( $this->val( $data, 'regular_price' ) ) );
