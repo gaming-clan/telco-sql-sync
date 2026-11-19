@@ -308,6 +308,7 @@ class WCSI_Admin {
 			'images'     => ! empty( $_POST['images'] ),
 			'image_base' => $base,
 			'first_as_main' => ! empty( $_POST['first_as_main'] ),
+			'meta_unmapped' => ! empty( $_POST['meta_unmapped'] ),
 			'list_sep'   => isset( $_POST['list_sep'] ) ? (string) wp_unslash( $_POST['list_sep'] ) : ',', // phpcs:ignore WordPress.Security
 		);
 		$job['table']   = $table;
@@ -500,6 +501,8 @@ class WCSI_Admin {
 					<select name="status" id="status"><option value="publish">publish</option><option value="draft">draft</option><option value="pending">pending</option><option value="private">private</option></select></td></tr>
 				<tr><th><label for="list_sep"><?php esc_html_e( 'List separator', 'telco-sql-sync' ); ?></label></th><td>
 					<input type="text" name="list_sep" id="list_sep" value="," size="3"> <span class="description"><?php esc_html_e( 'For categories, tags and gallery images.', 'telco-sql-sync' ); ?></span></td></tr>
+				<tr><th><?php esc_html_e( 'Other columns', 'telco-sql-sync' ); ?></th><td>
+					<label><input type="checkbox" name="meta_unmapped" value="1"> <?php esc_html_e( 'Save every column I did not map as a custom field (named sql_<column>)', 'telco-sql-sync' ); ?></label></td></tr>
 				<tr><th><?php esc_html_e( 'Images', 'telco-sql-sync' ); ?></th><td>
 					<label><input type="checkbox" name="images" value="1" checked> <?php esc_html_e( 'Download / import images into the media library', 'telco-sql-sync' ); ?></label><br>
 					<input type="text" class="large-text" name="image_base" value="<?php echo esc_attr( $job['image_base'] ); ?>" placeholder="<?php esc_attr_e( 'Image folder on the server (paths in the SQL are relative to it, or absolute inside it)', 'telco-sql-sync' ); ?>">
